@@ -5,20 +5,14 @@ Modificado por: Silvia Takahashi
 Modificado por: Juan Pablo Morales.
 Agregadas producciones para manejar globos
 Modificado por Silvia Takahashi
-
-
- **/
-
+*/
 
 options 
 {
-  
-	LOOKAHEAD=1; 
-	IGNORE_CASE=true;
-	STATIC = false;
-	
+    LOOKAHEAD=3;  
+    IGNORE_CASE=true;
+    STATIC = false;
 }
-   
 
 PARSER_BEGIN(Robot)
 
@@ -26,147 +20,591 @@ package uniandes.lym.robot.control;
 
 import uniandes.lym.robot.kernel.*;
 import uniandes.lym.robot.view.Console;
- 
 import java.awt.Point;
 import java.io.*;
 import java.util.Vector;
 import java.util.LinkedList;
+import java.util.HashMap;
 
 @SuppressWarnings("serial")
 public class Robot 
 {
+    private RobotWorldDec world;
+    String salida = new String();
 
+	private static HashMap<String, Integer > variables = new HashMap<String, Integer>();
+	private static HashMap<String, Procedure > procedures = new HashMap < String, Procedure>();
 
-	private RobotWorldDec world;
-	
-	
-	void setWorld(RobotWorld w) {
-		world = (RobotWorldDec) w;	
+	/* Metodos del Robot */
+
+	public void setWorld (RobotWorld w) {
+		world = (RobotWorldDec) w;
+	  }
+
+	// Añadir una nueva variable
+	public static void addVariable(Token token) {
+		String image = token.image.toLowerCase();
+		variables.put(image,0); // Inicializar la variable en 0
+
 	}
 
-	String salida=new String();
+	// Añadir un nuevo procedimiento
+	public static void addProcedure(Procedure procedure) {
+		procedures.put(procedure.getName(), procedure);
+	}
+	
+
+    // ✅ **Asignar un valor a una variable**
+    public static void assignVariable(Token variable, Token value) {
+        String varName = variable.image.toLowerCase();
+        String val = value.image.toLowerCase();
+        
+        if (variables.containsKey(varName)) {
+            try {
+                variables.put(varName, Integer.parseInt(val));  // 🔥 Convertimos a número
+            } catch (NumberFormatException e) {
+                throw new Error("❌ No se puede asignar " + val + " a la variable " + varName);
+            }
+        } else {
+            throw new Error("❌ La variable " + varName + " no está definida.");
+        }
+    }
+
+	// Verificar si una variable existe
+	public static void checkVariable(Token token) {
+		String image = token.image.toLowerCase();
+		if (!variables.containsKey(image)) {
+			throw new Error("❌ La variable " + image + " no está definida. Línea: " + token.beginLine);
+		  }
+	}
+
+		// ✅ Verifica si un procedimiento está definido
+	public static void checkProcedure(Token token) {
+	    String procName = token.image.toLowerCase();
+	    if (!procedures.containsKey(procName)) {
+	        throw new Error("❌ El procedimiento " + procName + " no está definido. Línea: " + token.beginLine);
+	    }
+	}
+	
+	public static int number(String number) {
+	    try {
+	        return Integer.parseInt(number);
+	    } catch (NumberFormatException ee) {
+	        throw new Error("❌ No se puede convertir " + number + " a un número.");
+	    }
+	}
+
+	public static String convertDirection(String direction) {
+	    switch (direction) {
+	        case "front":
+	            if (world.facingNorth()) {
+	                direction = "north";
+	            } else if (world.facingSouth()) {
+	                direction = "south";
+	            } else if (world.facingEast()) {
+	                direction = "east";
+	            } else {
+	                direction = "west";
+	            }
+	            break;
+	        case "back":
+	            if (world.facingNorth()) {
+	                direction = "south";
+	            } else if (world.facingSouth()) {
+	                direction = "north";
+	            } else if (world.facingEast()) {
+	                direction = "west";
+	            } else {
+	                direction = "east";
+	            }
+	            break;
+	        case "right":
+	            if (world.facingNorth()) {
+	                direction = "east";
+	            } else if (world.facingSouth()) {
+	                direction = "west";
+	            } else if (world.facingEast()) {
+	                direction = "south";
+	            } else {
+	                direction = "north";
+	            }
+	            break;
+	        case "left":
+	            if (world.facingNorth()) {
+	                direction = "west";
+	            } else if (world.facingSouth()) {
+	                direction = "east";
+	            } else if (world.facingEast()) {
+	                direction = "north";
+	            } else {
+	                direction = "south";
+	            }
+	            break;
+	    }
+	    return direction;
+	}
+	
+	// Robot classes
+	class Procedure {
+	    private String name;
+	    private ArrayList<String> params = new ArrayList<>();  // Lista de parámetros
+	    private ArrayList<Instruction> instructions = new ArrayList<>();  // Instrucciones del procedimiento
+	    private HashMap<String, String> info = new HashMap<>();  // 🔄 Ahora usa String en lugar de Integer
+	
+	    public Procedure(String name) {
+	        this.name = name.toLowerCase();
+	    }
+	
+	    // ✅ **Agregar un parámetro al procedimiento**
+	    public void addParam(String param) {
+	        if (!Robot.variables.containsKey(param)) {
+	            Robot.variables.put(param, 0);  // Inicializar el parámetro en la tabla de variables globales
+	        }
+	        params.add(param);  // Guardarlo en la lista de parámetros
+	    }
+	
+	    // ✅ **Agregar una instrucción al procedimiento**
+	    public void addInstruction(Instruction instruction) {
+	        instructions.add(instruction);
+	    }
+	
+	    // ✅ **Agregar un valor específico a info**
+	    public void addInfo(String key, String value) {
+	        info.put(key, value);
+	    }
+	
+	    // ✅ **Ejecutar el procedimiento**
+	    public void run() {
+	        for (Instruction instruction : instructions) {
+	            instruction.runFunction(info);  // ✅ Pasamos `info` a cada instrucción como `String`
+	        }
+	    }
+	
+	    // ✅ **Obtener el nombre del procedimiento**
+	    public String getName() {
+	        return name;
+	    }
+	
+	    // ✅ **Obtener los parámetros del procedimiento**
+	    public ArrayList<String> getParams() {
+	        return params;
+	    }
+	
+	    // ✅ **Obtener el valor de un parámetro en info**
+		public String getParamValue(String param) {
+		    if (info.containsKey(param)) {
+		        return info.get(param);  // ✅ Devolvemos el String sin convertirlo
+		    } else {
+		        throw new Error("❌ El parámetro " + param + " no está definido en el procedimiento " + name);
+		    }
+		}
+
+
+
+
+	
+
+
+
 }
+
+	
 PARSER_END(Robot)
 
-SKIP:
+/**
+ * Sección 1: Tokens del Robot
+ */
+
+SKIP : { " " | "\r" | "\t" | "\n" | "\f" }
+
+/**
+ * 🔹 1️⃣ Comandos del Robot 
+ */
+TOKEN : { <MOVE: "move"> }
+TOKEN : { <TURN: "turn"> }
+TOKEN : { <FACE: "face"> }
+TOKEN : { <PICK: "pick"> }
+TOKEN : { <PUT: "put"> }
+TOKEN : { <JUMP: "jump"> }
+TOKEN : { <GOTO: "goto"> }
+TOKEN : { <NOP: "nop"> }
+
+/**
+ * 🔹 2️⃣ Direcciones y Orientaciones
+ */
+TOKEN : { <LEFT : "left"> }
+TOKEN : { <RIGHT : "right"> }
+TOKEN : { <AROUND : "around"> }
+TOKEN : { <NORTH : "north"> }
+TOKEN : { <SOUTH : "south"> }
+TOKEN : { <WEST : "west"> }
+TOKEN : { <EAST : "east"> }
+TOKEN : { <FRONT : "front"> }
+TOKEN : { <BACK : "back"> }
+TOKEN : { <INDIR : "inDir"> }
+TOKEN : { <TOTHE : "toThe"> }
+
+/**
+ * 🔹 3️⃣ Objetos en el Mundo del Robot 
+ */
+TOKEN : { <BALLOONS: "balloons"> }
+TOKEN : { <CHIPS: "chips"> }
+
+/**
+ * 🔹 4️⃣ Estructuras de Control 
+ */
+TOKEN : { <IF: "if"> }
+TOKEN : { <THEN: "then"> }
+TOKEN : { <ELSE: "else"> }
+TOKEN : { <WHILE: "while"> }
+TOKEN : { <DO: "do"> }
+TOKEN : { <REPEAT: "repeat"> }
+TOKEN : { <FOR: "for"> }  // 🔥 AGREGADO
+
+/**
+ * 🔹 5️⃣ Condiciones
+ */
+TOKEN : { <FACING: "facing"> }
+TOKEN : { <CANPUT: "canput"> }
+TOKEN : { <CANPICK: "canpick"> }
+TOKEN : { <CANMOVE: "canmove"> }
+TOKEN : { <CANJUMP: "canjump"> }
+TOKEN : { <NOT: "not"> }
+TOKEN : { <OF_TYPE: "ofType"> }
+
+
+/**
+ * 🔹 6️⃣ Símbolos y Operadores
+ */
+/**
+ * 🔹 6️⃣ Símbolos y Operadores
+ */
+TOKEN : { <LBRACKET: "["> }
+TOKEN : { <RBRACKET: "]"> }
+TOKEN : { <ASSIGN: ":="> }
+TOKEN : { <END: "."> }
+TOKEN : { <COMMA: ","> }
+TOKEN : { <COLON: ":"> }
+TOKEN : { <VARBLOCK: "|"> }
+TOKEN : { <WITH: "with"> }  // ✅ Agregado
+
+
+
+/**
+ * 🔹 7️⃣ Variables y Valores
+ */
+TOKEN : { <PROC : "proc"> }
+TOKEN : { <AND : "and"> }
+TOKEN : { <NAME : <LETTER> (<LETTER> | <DIGIT>)* > }
+TOKEN : { <NUMBER : (<DIGIT>)+ > }
+TOKEN : { <#LETTER : ["a"-"z", "A"-"Z"]> }
+TOKEN : { <#DIGIT : ["0"-"9"]> }
+
+/**
+ * Sección 2: Reglas de Producción
+ */
+
+// 📌 **Punto de inicio del parser**
+boolean command(Console sistema) : { salida = new String(); Block block; }
 {
-	" "
-	|	"\r"
-	|	"\t"
-	| "\n"
+    (VarDeclaration())?  // Variables opcionales
+    (ProcDeclaration())* // Procedimientos opcionales
+    block = Block()      // Bloque obligatorio
+    <EOF> 
+    { 
+        block.run(); 
+        variables.clear(); 
+        procedures.clear(); 
+        return false; 
+    }
 }
 
-TOKEN: /* Nombres de Comandos */
+// 📌 **Definir variables**
+void VarDeclaration() :
+{Token var;}
 {
-
-			<MOV:  "Mov">
-		| 	<RIGHT: "RIGHT">
-		| 	<PUT: "Put">
-		| 	<PICK: "Pick">
-		|  < POP: "Pop" >
-		|  <GO: "GO" >
-        |  < HOP:  "HOP" >		
-
-}
-
-TOKEN:
-{
-		<BALLOONS:  "BALLOONS" >
-		|	<CHIPS:     "CHIPS"  >	
-
+    <VARBLOCK> 
+    var = <NAME> { variables.put(var.image, 0); }  // Primera variable obligatoria
+    (var = <NAME> { variables.put(var.image, 0); })*  // Cualquier cantidad de variables adicionales
+    <VARBLOCK>
 }
 
 
+/* Function Rules */
 
-TOKEN :
+void ProcDeclaration() :
 {
-		<NUM: (<DIGIT>)+ >
-		|  	<#DIGIT: ["0"-"9"] >
-        
+    Token procName;
+}
+{
+    <PROC> (procName = <NAME> Block() { procedures.put(procName.image, ""); })+
+}
+
+void ProcedureDef() :
+{
+    Token procName, param;
+    Procedure procedure;
+    Block block;
+}
+{
+    <PROC> procName = <NAME>  // Nombre del procedimiento
+    { procedure = new Procedure(procName.image); }
+
+    <COLON> param = <NAME> { procedure.addParam(param.image); }  // Ahora se guarda en `localVariables`
+
+    // Se permiten más parámetros
+    (<NAME> <COLON> param = <NAME> { procedure.addParam(param.image); })*
+
+    block = Block()  // Cuerpo del procedimiento
+    <END>  // Finaliza con `.`
+    { procedure.setBlock(block); Robot.addProcedure(procedure); }
 }
 
 
 
-	//boolean command(uniandes.lym.robot.view.Console sistema) :
-	boolean command(Console sistema):
-	{	
-		
-		int x,y;
-		salida=new String();	
-	}
 
-	
-	{
-		(		  (
-		   <RIGHT> "(" ")" {world.turnRight();salida = "Command: Turnright";}
-		| 	<MOV>  "(" x=num() ")" {world.moveForward(x,false);salida = "Command: Moveforward ";}  
-		| 	<HOP>  "(" x=num() ")" {world.moveForward(x,true);salida = "Command:Jumpforward ";}
-		| 	<GO>  "(" x=num() "," y=num()")" {world.setPostion(x,y);salida = "Command:GO ";}  
-		|  <PUT> "("  put() ")"					  			
-		|  <PICK> "(" get()  ")"	
-	    |  < POP > "(" x=num() ")" {world.popBalloons(x); salida = "Comando:  Pop";}
-		) ";" 
 
-		{
-		    try {
-	    			 Thread.sleep(900);
-	    	    } catch (InterruptedException e) {
-	    			        System.err.format("IOException: %s%n", e);
-	    		    }
-	    			 
-			sistema.printOutput(salida);
-			return true;
-		})+
+Instruction instruction() : {Instruction ins;} {
+    ins = Command() { return ins; }
+    | ins = ProcedureCall() { return ins; }
+    | ins = ControlStructure() { return ins; }
+    | ins = Assignment() { return ins; }  // 🔥 Agregamos la asignación aquí
+}
 
-    	| <EOF> {return false;} 
-	}
 
-	void put() :
-	{
-		int f=1;	
-	}
-	{
-		( <CHIPS>    "," f=num() {world.putChips(f); salida = "Command:  Put Chips"; })
-		|  	  ( <BALLOONS>   "," f=num() {world.putBalloons(f); salida = "Command:  Put Balloons";})	 
-
-	}
-
-	void get() :
-	{
-		int f=1;	
-	}
-	{
-		( <CHIPS>   "," f=num() {world.pickChips(f);salida = "Command:  Pick chips";})
-		|  	  ( <BALLOONS>   "," f=num() {world.grabBalloons(f);salida="Command:  Pick balloons";})	 
-
-	}
-
-	
-	
-
-	/**
-	 * Unsigned decimal number
-	 * @return the corresponding value of the string
-	 * @error  corresponding value is too large
-	 */
-
-	int num() throws Error:
-	{	
-		int total=1;
-	}
-	{
-		<NUM>
-		{
-			try 
-			{
-				total = Integer.parseInt(token.image);
-			} 
-			catch (NumberFormatException ee) 
-			{
-				throw new Error("Number out of bounds: "+token.image+" !!");
-			}
-			return total;
+// 📌 **Definir los comandos**
+void Command() :
+{
+    Token param1, param2, tag;
+}
+{
+    (
+		// ✅ **Comando MOVE**
+		<MOVE> <COLON> (param1 = <NUMBER> | param1 = <NAME> { Robot.checkVariable(param1); }) <END> {
+		    world.moveForward(Integer.parseInt(param1.image), false); 
 		}
-	}
+		
+		// ✅ **Comando MOVE TO THE**
+		| <MOVE> <COLON> (param1 = <NUMBER> | param1 = <NAME> { Robot.checkVariable(param1); }) 
+		  <TOTHE> param2 = Direction() <END> {
+		    world.moveForward(Integer.parseInt(param1.image), false);
+		}
+		
+		// ✅ **Comando MOVE IN DIR**
+		| <MOVE> <COLON> (param1 = <NUMBER> | param1 = <NAME> { Robot.checkVariable(param1); }) 
+		  <INDIR> param2 = Orientation() <END> {
+		    world.moveForward(Integer.parseInt(param1.image), false);
+		}
 
-	
+
+        // ✅ **Comando JUMP**
+        | <JUMP> <COLON> param1 = <NUMBER> <END> {
+            world.moveForward(Integer.parseInt(param1.image), true);
+        }
+
+        // ✅ **Comando JUMP TO THE**
+        | <JUMP> <COLON> param1 = <NUMBER> <TOTHE> param2 = Direction() <END> {
+            world.moveForward(Integer.parseInt(param1.image), true);
+        }
+
+        // ✅ **Comando JUMP IN DIR**
+        | <JUMP> <COLON> param1 = <NUMBER> <INDIR> param2 = Orientation() <END> {
+            world.moveForward(Integer.parseInt(param1.image), true);
+        }
+
+        // ✅ **Comando TURN**
+        | <TURN> <COLON> param1 = Direction() <END> {
+            if (param1.image.equals("right")) world.turnRight();
+            else if (param1.image.equals("left")) world.turnLeft();
+            else world.turnAround();
+        }
+
+        // ✅ **Comando FACE**
+        | <FACE> <COLON> param1 = Orientation() <END> {
+            System.out.println("👀 Mirando hacia " + param1.image);
+        }
+
+        // ✅ **Comando PUT**
+        | <PUT> <COLON> (param1 = <NUMBER> | param1 = <NAME> { Robot.checkVariable(param1); }) <OF_TYPE> param2 = ObjectType() <END>
+ {
+            if (param2.image.equals("balloons")) {
+                world.putBalloons(Integer.parseInt(param1.image));
+            } else {
+                world.putChips(Integer.parseInt(param1.image));
+            }
+        }
+
+        // ✅ **Comando PICK**
+        | <PICK> <COLON> (param1 = <NUMBER> | param1 = <NAME> { Robot.checkVariable(param1); }) <OF_TYPE> param2 = ObjectType() <END>
+ {
+            if (param2.image.equals("balloons")) {
+                world.grabBalloons(Integer.parseInt(param1.image));
+            } else {
+                world.pickChips(Integer.parseInt(param1.image));
+            }
+        }
+
+        // ✅ **Comando GOTO (modificado para aceptar variables)**
+        | <GOTO> <COLON> (param1 = <NUMBER> | param1 = <NAME> { Robot.checkVariableF(param1); }) 
+          <WITH> (param2 = <NUMBER> | param2 = <NAME> { Robot.checkVariableF(param2); }) <END> {
+            world.setPostion(Integer.parseInt(param1.image), Integer.parseInt(param2.image));
+        }
+
+        // ✅ **Comando NOP**
+        | <NOP> <END> {
+            System.out.println("⏸️ No hacer nada.");
+        }
+    )
+}
+
+ControlStructure ControlStructure() :
+{
+    Token str, var;
+    Condition con;
+    Block block1, block2;
+}
+{
+    (
+        // ✅ **IF Statement**
+        str = <IF> <COLON> con = Condition() <THEN> <COLON> 
+        (block1 = Block() | block1 = OneInstruction()) 
+        <ELSE> <COLON> 
+        (block2 = Block() | block2 = OneInstruction()) 
+        { return new ControlStructure(str, con, block1, block2); }
+
+        // ✅ **WHILE Loop**
+        | str = <WHILE> <COLON> con = Condition() <DO> <COLON> 
+        (block1 = Block() | block1 = OneInstruction())  
+        { return new ControlStructure(str, con, block1); }
+
+		// ✅ **FOR Loop (for: n repeat:)**
+		| str = <FOR> <COLON> (var = <NUMBER> | var = <NAME> { Robot.checkVariable(var); }) <REPEAT> 
+		(block1 = Block() | block1 = OneInstruction())  
+		{ return new ControlStructure(str, var, block1); }
+
+    )
+}
+
+Condition Condition() : { Token con; Token param1; Token param2; Condition subcondition; } {
+    (
+        // ✅ **Facing Condition** (Se deja como estaba antes)
+        con = <FACING> <COLON> param1 = <NORTH> | param1 = <SOUTH> | param1 = <WEST> | param1 = <EAST>  
+        { return new Condition(con, param1); }
+
+		// ✅ **CanPut & CanPick**
+		| (con = <CANPUT> | con = <CANPICK>) <COLON> (param1 = <NUMBER> | param1 = <NAME> { Robot.checkVariable(param1); }) 
+		  <OF_TYPE> (param2 = <BALLOONS> | param2 = <CHIPS>)  
+		{ return new Condition(con, param1, param2); }
+		
+		// ✅ **CanMove & CanJump (toThe)**
+		| (con = <CANMOVE> | con = <CANJUMP>) <COLON> (param1 = <NUMBER> | param1 = <NAME> { Robot.checkVariable(param1); }) 
+		  <TOTHE> (param2 = <FRONT> | param2 = <BACK> | param2 = <LEFT> | param2 = <RIGHT>)  
+		{ return new Condition(con, param1, param2); }
+		
+		// ✅ **CanMove & CanJump (inDir)**
+		| (con = <CANMOVE> | con = <CANJUMP>) <COLON> (param1 = <NUMBER> | param1 = <NAME> { Robot.checkVariable(param1); }) 
+		  <INDIR> (param2 = <NORTH> | param2 = <SOUTH> | param2 = <WEST> | param2 = <EAST>)  
+		{ return new Condition(con, param1, param2); }
+
+
+        // ✅ **Not Condition**
+        | con = <NOT> <COLON> subcondition = Condition()  
+        { return new Condition(con, subcondition); }
+    )
+}
+
+
+// 📌 **Llamada a procedimientos con verificación**
+void ProcedureCall() :
+{
+    Token procName, param;
+    ArrayList<Integer> values = new ArrayList<>();
+}
+{
+    procName = <NAME>  
+
+    {
+        if (!procedures.containsKey(procName.image)) {
+            throw new Error("❌ El procedimiento " + procName.image + " no está definido.");
+        }
+    }
+
+    (<COLON> param = <NUMBER> | param = <NAME>  
+        { 
+            Robot.checkVariable(param);  
+            values.add(Robot.getVariableValue(param.image));  // 🔥 Agrega el valor real del parámetro
+        }
+
+        // Se permiten más parámetros
+        (<NAME> <COLON> param = <NUMBER> | param = <NAME>  
+            { 
+                Robot.checkVariable(param);  
+                values.add(Robot.getVariableValue(param.image));  
+            }
+        )*
+    )?
+
+    <END>  
+    { procedures.get(procName.image).run(values); }  // 🔥 Ahora pasamos los valores correctos
+}
+
+
+
+
+
+
+Instruction Assignment() :
+{
+    Token var, value;
+}
+{
+    var = <NAME> { Robot.checkVariable(var); } 
+    <ASSIGN> (value = <NUMBER> | value = <NAME> { Robot.checkVariable(value); }) 
+    <END>
+
+    {
+        if (Procedure.isExecuting()) {
+            Procedure.getCurrentProcedure().setVariable(var.image, Robot.getVariableValue(value.image));
+        } else {
+            Robot.assignGlobalVariable(var, value);
+        }
+    }
+}
+
+
+// 📌 **Bloque de instrucciones `[ ... ]`**
+Block Block() : { Block block = new Block(); Instruction ins; } {
+    <LBRACKET> 
+    ins = instruction() { block.addInstruction(ins); }
+    (<END> ins = instruction() { block.addInstruction(ins); })*  // 🔥 Separamos con `.`
+    <RBRACKET>
+    { return block; }
+}
+
+// 📌 **Instrucción única (usada en IF, WHILE, etc.)**
+Block OneInstruction() : { Block block = new Block(); Instruction ins; } {
+    ins = instruction() { block.addInstruction(ins); }
+    { return block; }
+}
+
+// 📌 **Dirección del Robot**
+Token Direction() : { Token param1; }
+{
+    ( param1 = <LEFT> | param1 = <RIGHT> | param1 = <AROUND> ) { return param1; }
+}
+
+// 📌 **Orientación del Robot**
+Token Orientation() : { Token param1; }
+{
+    ( param1 = <NORTH> | param1 = <SOUTH> | param1 = <WEST> | param1 = <EAST> ) { return param1; }
+}
+
+// 📌 **Tipo de Objeto (Globos, Fichas)**
+Token ObjectType() : { Token param1; }
+{
+    ( param1 = <BALLOONS> | param1 = <CHIPS> ) { return param1; }
+}
+
+
+
+
