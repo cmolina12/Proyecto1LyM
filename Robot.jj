@@ -1,0 +1,1382 @@
+/*
+Gramatica para el Robot:
+Autor: Alejandro Arango
+Modificado por: Silvia Takahashi
+Modificado por: Juan Pablo Morales.
+Agregadas producciones para manejar globos
+Modificado por Silvia Takahashi
+*/
+
+options 
+{
+    LOOKAHEAD=3;  
+    IGNORE_CASE=true;
+    STATIC = false;
+}
+
+PARSER_BEGIN(Robot)
+
+package uniandes.lym.robot.control;
+
+import uniandes.lym.robot.kernel.*;
+import uniandes.lym.robot.view.Console;
+import java.awt.Point;
+import java.io.*;
+import java.util.Vector;
+import java.util.LinkedList;
+import java.util.HashMap;
+import java.util.ArrayList;
+
+@SuppressWarnings("serial")
+public class Robot 
+{
+    private static RobotWorldDec world;
+    String salida = new String();
+
+	private static HashMap<String, String > variables = new HashMap<String, String>();
+	private static HashMap<String, Procedure > procedures = new HashMap < String, Procedure>();
+
+	/* Metodos del Robot */
+
+	public void setWorld (RobotWorld w) {
+		world = (RobotWorldDec) w;
+	  }
+
+	// Añadir una nueva variable
+	public static void addVariable(Token token) {
+		String image = token.image.toLowerCase();
+		variables.put(image,"0"); // Inicializar la variable en null
+
+	}
+
+	// Añadir un nuevo procedimiento
+	public static void addProcedure(Procedure procedure) {
+		procedures.put(procedure.getName(), procedure);
+	}
+	
+
+	// ✅ **Asignar un valor a una variable**
+	public static void assignVariable(String number, String variable) {
+	    if (variables.containsKey(variable)) {
+	        variables.put(variable, number);  // 🔥 Ahora guarda el número como String
+	    } else {
+	        throw new Error("❌ No se puede asignar " + number + " a la variable " + variable + " porque no está definida.");
+	    }
+	}
+
+
+
+	// Verificar si una variable existe
+	public static void checkVariable(Token token) {
+		String image = token.image.toLowerCase();
+		if (!variables.containsKey(image)) {
+			throw new Error("❌ La variable " + image + " no está definida. Línea: " + token.beginLine);
+		  }
+	}
+
+		// ✅ Verifica si un procedimiento está definido
+	public static void checkProcedure(Token token) {
+	    String procName = token.image.toLowerCase();
+	    if (!procedures.containsKey(procName)) {
+	        throw new Error("❌ El procedimiento " + procName + " no está definido. Línea: " + token.beginLine);
+	    }
+	}
+
+	public static Procedure getProcedure(Token token) {
+	    String procName = token.image.toLowerCase();
+	    if (procedures.containsKey(procName)) {
+	        return procedures.get(procName);
+	    } else {
+	        throw new Error("❌ El procedimiento " + procName + " no está definido. Línea: " + token.beginLine);
+	    }
+	}
+
+	
+	public static int number(String number) {
+	    try {
+	        return Integer.parseInt(number);
+	    } catch (NumberFormatException ee) {
+	        throw new Error("❌ No se puede convertir " + number + " a un número.");
+	    }
+	}
+
+	public static String convertDirection(String direction) {
+	    switch (direction) {
+	        case "front":
+	            if (world.facingNorth()) {
+	                direction = "north";
+	            } else if (world.facingSouth()) {
+	                direction = "south";
+	            } else if (world.facingEast()) {
+	                direction = "east";
+	            } else {
+	                direction = "west";
+	            }
+	            break;
+	        case "back":
+	            if (world.facingNorth()) {
+	                direction = "south";
+	            } else if (world.facingSouth()) {
+	                direction = "north";
+	            } else if (world.facingEast()) {
+	                direction = "west";
+	            } else {
+	                direction = "east";
+	            }
+	            break;
+	        case "right":
+	            if (world.facingNorth()) {
+	                direction = "east";
+	            } else if (world.facingSouth()) {
+	                direction = "west";
+	            } else if (world.facingEast()) {
+	                direction = "south";
+	            } else {
+	                direction = "north";
+	            }
+	            break;
+	        case "left":
+	            if (world.facingNorth()) {
+	                direction = "west";
+	            } else if (world.facingSouth()) {
+	                direction = "east";
+	            } else if (world.facingEast()) {
+	                direction = "north";
+	            } else {
+	                direction = "south";
+	            }
+	            break;
+	    }
+	    return direction;
+	}
+	
+	// Robot classes
+	class Procedure {
+	    private String name;
+	    private ArrayList<String> params = new ArrayList<>();  // Lista de parámetros
+	    private ArrayList<Instruction> instructions = new ArrayList<Instruction>();  // Instrucciones del procedimiento
+	    private HashMap<String, String> info = new HashMap<>();  // 🔄 Ahora usa String en lugar de Integer
+		private Block block;
+		
+	    public Procedure(String name) {
+	        this.name = name.toLowerCase();
+	    }
+
+	    public void setBlock(Block block) {  // 🔥 Método que faltaba
+	        this.block = block;
+	    }
+	
+	    // ✅ **Agregar un parámetro al procedimiento**
+	    public void addParam(String param) {
+	        if (!Robot.variables.containsKey(param)) {
+	            Robot.variables.put(param, "0");  // Inicializar el parámetro en la tabla de variables globales
+	        }
+	        params.add(param);  // Guardarlo en la lista de parámetros
+	    }
+	
+	    // ✅ **Agregar una instrucción al procedimiento**
+	    public void addInstruction(Instruction instruction) {
+	        instructions.add(instruction);
+	    }
+	
+	    // ✅ **Agregar un valor específico a info**
+	    public void addInfo(String key, String value) {
+	        info.put(key, value);
+	    }
+	
+	    // ✅ **Obtener el nombre del procedimiento**
+	    public String getName() {
+	        return name;
+	    }
+	
+	    // ✅ **Obtener los parámetros del procedimiento**
+	    public ArrayList<String> getParams() {
+	        return params;
+	    }
+	
+	    // ✅ **Obtener el valor de un parámetro en info**
+		public String getParamValue(String param) {
+		    if (info.containsKey(param)) {
+		        return info.get(param);  // ✅ Devolvemos el String sin convertirlo
+		    } else {
+		        throw new Error("❌ El parámetro " + param + " no está definido en el procedimiento " + name);
+		    }
+		}
+
+	    // ✅ **Ejecutar el procedimiento**
+	    public void run() {
+	        for (Instruction instruction : instructions) {
+	            instruction.runFunction(info);  // ✅ Pasamos `info` a cada instrucción como `String`
+	        }
+	    }
+	
+
+		public void runFunction(HashMap<String, String> info) {
+			for (Instruction instruction: instructions) {
+			instruction.runFunction(info);
+			 }
+		 }
+	}
+	class Block{
+
+		private ArrayList<Instruction> instructions = new ArrayList<>();
+
+		public void addInstruction(Instruction instruction) {
+			instructions.add(instruction);
+
+
+
+		}
+
+		public void run(){
+			for (Instruction instruction : instructions) {
+				instruction.run();
+			}
+
+
+
+		}
+
+		public void runFunction(HashMap<String, String> info) {
+			for (Instruction instruction : instructions) {
+				instruction.runFunction(info);
+			}
+		}
+	}
+
+	abstract class Instruction {
+			public abstract void run();
+			public abstract void runFunction(HashMap<String, String> info);
+		}
+
+			// Constructores
+	class Command extends Instruction {
+	    private String com;
+	    private String var1;
+	    private String var2;
+	    private int x;
+	    private int y;
+	    private int endOrientation;
+	    private boolean r = true;
+	    private HashMap<String, Integer> hm = new HashMap<String, Integer>() {{
+	        put("#north", 0);
+	        put("#east", 1);
+	        put("#south", 2);
+	        put("#west", 3);
+	    }};
+ 		private String moveType;
+	
+	    // Constructores
+	    public Command(Token com, Token var1, Token var2) {
+	        this.com = com.image.toLowerCase();
+	        this.var1 = var1.image.toLowerCase();
+	        this.var2 = var2.image.toLowerCase();
+	    }
+	
+	    public Command(Token com, Token var1) {
+	        this.com = com.image.toLowerCase();
+	        this.var1 = var1.image.toLowerCase();
+	    }
+	
+	    public Command(Token com) {
+	        this.com = com.image.toLowerCase();
+	    }
+
+		public Command(Token com, Token param1, Token param2, String moveType) {
+		    this.com = com.image.toLowerCase();
+		    this.var1 = param1.image.toLowerCase();
+		    this.var2 = (param2 != null) ? param2.image.toLowerCase() : null;
+		    this.moveType = moveType;
+		
+		    // ✅ Si es `jump`, lo tratamos diferente internamente
+		    if (com.image.equalsIgnoreCase("jump")) {
+		        this.moveType = moveType.replace("move", "jump");  // Convierte "moveToThe" en "jumpToThe"
+		    }
+		}
+
+
+	
+	    public void face(int endOrientation) {
+	        int initialOrientation = world.getFacing();
+	        int nOfRightTurns = numberOfRightTurns(initialOrientation, endOrientation);
+	        for (int i = 0; i < nOfRightTurns; i++) {
+	            world.turnRight();
+	        }
+	    }
+	
+	    public int numberOfRightTurns(int initialOrientation, int endOrientation) {
+	        int nOfRightTurns = 0;
+	        if (initialOrientation != endOrientation) {
+	            if ((initialOrientation + endOrientation) % 4 == 1)
+	                nOfRightTurns = 2;
+	            else if ((initialOrientation + endOrientation) == 3) {
+	                if (initialOrientation > endOrientation) {
+	                    nOfRightTurns = 1;
+	                } else {
+	                    nOfRightTurns = 3;
+	                }
+	            } else if (initialOrientation < endOrientation) {
+	                nOfRightTurns = 1;
+	            } else if (initialOrientation > endOrientation) {
+	                nOfRightTurns = 3;
+	            }
+	        }
+	        return nOfRightTurns;
+	    }
+	
+		public void run() {
+		    verify();
+		
+		    System.out.println("🚀 Ejecutando " + com + " con param1=" + var1 + 
+		                      (var2 != null ? " y param2=" + var2 : ""));
+		
+		    switch (com) {
+		        // ✅ Asignación de variables `:=`
+		        case ":=":
+		            Robot.assignVariable(var1, var2);
+		            break;
+		
+		        // ✅ Comando `goto: x with: y .`
+		        case "goto":
+		            x = number(var1);
+		            y = number(var2);
+		            if (!world.isBlocked(new Point(x, y))) {
+		                world.setPostion(x, y);
+		            } else {
+		                throw new Error("Cannot move to " + x + ", " + y + " because that position is blocked");
+		            }
+		            break;
+		
+		        // ✅ Comandos `move: n .` y `jump: n .`
+		        case "move":
+		        case "jump":
+		            x = number(var1);
+		
+		            if (var2 != null) {
+		                if (moveType.equals("toThe")) {
+		                    var2 = Robot.convertDirection(var2);
+		                }
+		                if (moveType.equals("inDir")) {
+		                    endOrientation = hm.get(var2);
+		                    face(endOrientation);
+		                }
+		            }
+		
+		            // 🔥 Si es `move`, se mueve normalmente. Si es `jump`, salta.
+		            boolean isJump = com.equals("jump");
+		            System.out.println("➡️ " + (isJump ? "Saltando" : "Moviendo") + " " + x + " pasos en modo " + moveType);
+		            world.moveForward(x, isJump);
+		            break;
+		
+		        // ✅ Comando `turn: D .`
+		        case "turn":
+		            if (var1.equals("#right")) {
+		                world.turnRight();
+		            } else if (var1.equals("#around")) {
+		                world.turnRight();
+		                world.turnRight();
+		            } else if (var1.equals("#left")) {
+		                world.turnRight();
+		                world.turnRight();
+		                world.turnRight();
+		            }
+		            break;
+		
+		        // ✅ Comando `face: O .`
+		        case "face":
+		            if (hm.containsKey(var1)) {
+		                endOrientation = hm.get(var1);
+		                face(endOrientation);
+		            } else {
+		                throw new Error("Invalid orientation in 'face:' command");
+		            }
+		            break;
+		
+		        // ✅ Comando `put: n ofType: X .`
+		        case "put":
+		            if (var2 != null) {
+		                x = number(var1);
+		                if (var2.equals("#chips")) {
+		                    world.putChips(x);
+		                } else if (var2.equals("#balloons")) {
+		                    world.putBalloons(x);
+		                } else {
+		                    throw new Error("Invalid object type in 'put:' command");
+		                }
+		            } else {
+		                throw new Error("Object type missing in 'put:' command");
+		            }
+		            break;
+		
+		        // ✅ Comando `pick: n ofType: X .`
+		        case "pick":
+		            if (var2 != null) {
+		                x = number(var1);
+		                if (var2.equals("#chips")) {
+		                    world.pickChips(x);
+		                } else if (var2.equals("#balloons")) {
+		                    world.grabBalloons(x);
+		                } else {
+		                    throw new Error("Invalid object type in 'pick:' command");
+		                }
+		            } else {
+		                throw new Error("Object type missing in 'pick:' command");
+		            }
+		            break;
+		
+		        // ✅ Comando `nop .`
+		        case "nop":
+		            System.out.println("⏸️ No hacer nada.");
+		            break;
+		
+		        default:
+		            throw new Error("❌ Comando desconocido: " + com);
+		    }
+		}
+
+
+		public void runFunction(HashMap<String, String> info) {
+		    verifyF(info);
+		
+		    System.out.println("🚀 Ejecutando " + com + " con param1=" + var1 + 
+		                      (var2 != null ? " y param2=" + var2 : ""));
+		
+		    switch (com) {
+		        // ✅ Asignación de variables `:=`
+		        case ":=":
+		            Robot.assignVariable(var1, var2);
+		            break;
+		
+		        // ✅ Comando `goto: x with: y .`
+		        case "goto":
+		            x = number(var1);
+		            y = number(var2);
+		            if (!world.isBlocked(new Point(x, y))) {
+		                world.setPostion(x, y);
+		            } else {
+		                throw new Error("Cannot move to " + x + ", " + y + " because that position is blocked");
+		            }
+		            break;
+		
+		        // ✅ Comandos `move: n .` y `jump: n .`
+		        case "move":
+		        case "jump":
+		            x = number(var1);
+		
+		            if (var2 != null) {
+		                if (moveType.equals("toThe")) {
+		                    var2 = Robot.convertDirection(var2);
+		                }
+		                if (moveType.equals("inDir")) {
+		                    endOrientation = hm.get(var2);
+		                    face(endOrientation);
+		                }
+		            }
+		
+		            boolean isJump = com.equals("jump");
+		            System.out.println("➡️ " + (isJump ? "Saltando" : "Moviendo") + " " + x + " pasos en modo " + moveType);
+		            world.moveForward(x, isJump);
+		            break;
+		
+		        // ✅ Comando `turn: D .`
+		        case "turn":
+		            if (var1.equals("#right")) {
+		                world.turnRight();
+		            } else if (var1.equals("#around")) {
+		                world.turnRight();
+		                world.turnRight();
+		            } else if (var1.equals("#left")) {
+		                world.turnRight();
+		                world.turnRight();
+		                world.turnRight();
+		            }
+		            break;
+		
+		        // ✅ Comando `face: O .`
+		        case "face":
+		            if (hm.containsKey(var1)) {
+		                endOrientation = hm.get(var1);
+		                face(endOrientation);
+		            } else {
+		                throw new Error("Invalid orientation in 'face:' command");
+		            }
+		            break;
+		
+		        // ✅ Comando `put: n ofType: X .`
+		        case "put":
+		            if (var2 != null) {
+		                x = number(var1);
+		                if (var2.equals("#chips")) {
+		                    world.putChips(x);
+		                } else if (var2.equals("#balloons")) {
+		                    world.putBalloons(x);
+		                } else {
+		                    throw new Error("Invalid object type in 'put:' command");
+		                }
+		            } else {
+		                throw new Error("Object type missing in 'put:' command");
+		            }
+		            break;
+		
+		        // ✅ Comando `pick: n ofType: X .`
+		        case "pick":
+		            if (var2 != null) {
+		                x = number(var1);
+		                if (var2.equals("#chips")) {
+		                    world.pickChips(x);
+		                } else if (var2.equals("#balloons")) {
+		                    world.grabBalloons(x);
+		                } else {
+		                    throw new Error("Invalid object type in 'pick:' command");
+		                }
+		            } else {
+		                throw new Error("Object type missing in 'pick:' command");
+		            }
+		            break;
+		
+		        // ✅ Comando `nop .`
+		        case "nop":
+		            System.out.println("⏸️ No hacer nada.");
+		            break;
+		
+		        default:
+		            throw new Error("❌ Comando desconocido: " + com);
+		    }
+		}
+
+		// 📌 ✅ Verificación en ejecución normal (no confunde números con variables)
+		public void verify() {
+		    if (!isNumber(var1) && (!Robot.variables.containsKey(var1) || Robot.variables.get(var1) == null)) {
+		        throw new Error("❌ Variable no definida: " + var1);
+		    }
+		    if (var2 != null && !isNumber(var2) && (!Robot.variables.containsKey(var2) || Robot.variables.get(var2) == null)) {
+		        throw new Error("❌ Variable no definida: " + var2);
+		    }
+		}
+
+		// 📌 ✅ Verificación en ejecución de función (maneja variables y números correctamente)
+		public void verifyF(HashMap<String, String> info) {
+		    if (!isNumber(var1)) {
+		        if (info.containsKey(var1) && info.get(var1) != null) {
+		            var1 = info.get(var1);
+		        } else if (Robot.variables.containsKey(var1) && Robot.variables.get(var1) != null) {
+		            var1 = Robot.variables.get(var1);
+		        } else {
+		            throw new Error("❌ Variable no definida: " + var1);
+		        }
+		    }
+		
+		    if (var2 != null && !isNumber(var2)) {
+		        if (info.containsKey(var2) && info.get(var2) != null) {
+		            var2 = info.get(var2);
+		        } else if (Robot.variables.containsKey(var2) && Robot.variables.get(var2) != null) {
+		            var2 = Robot.variables.get(var2);
+		        } else {
+		            throw new Error("❌ Variable no definida: " + var2);
+		        }
+		    }
+		}
+		
+		// 📌 ✅ Método auxiliar para verificar si un string es un número
+		private boolean isNumber(String str) {
+		    try {
+		        Integer.parseInt(str);
+		        return true;
+		    } catch (NumberFormatException e) {
+		        return false;
+		    }
+		}
+
+
+	}
+
+			
+	
+	
+
+
+	class ProcedureCall extends Instruction {
+		private Token name;
+		private Procedure procedure;
+		private ArrayList<String> params;
+		private ArrayList<String> values = new ArrayList<>();
+	
+		public ProcedureCall(Token name) {
+			this.name = name;
+			this.procedure = Robot.getProcedure(name);  // Cambiamos Function → Procedure
+			this.params = procedure.getParams();
+		}
+	
+		public void addValue(Token name) {
+			String image = name.image.toLowerCase();
+			values.add(image);
+		}
+	
+		public void run() {
+			execute();
+		}
+	
+		public void runFunction(HashMap<String, String> info) {
+			execute(info);
+		}
+	
+		private void execute() {
+			if (values.size() != params.size()) {
+				throw new Error("The procedure " + name.image.toLowerCase() + 
+								" must have " + params.size() + " params, not " + values.size() +
+								"\nLine: " + name.beginLine);
+			}
+	
+			// Mapeamos valores pasados a los parámetros del procedimiento
+			HashMap<String, String> localInfo = new HashMap<>();
+			for (int i = 0; i < values.size(); i++) {
+				localInfo.put(params.get(i), values.get(i));
+			}
+	
+			// Ejecutamos el procedimiento con los valores correctos
+			procedure.runFunction(localInfo);
+		}
+	
+		private void execute(HashMap<String, String> parentInfo) {
+			if (values.size() != params.size()) {
+				throw new Error("The procedure " + name.image.toLowerCase() + 
+								" must have " + params.size() + " params, not " + values.size() +
+								"\nLine: " + name.beginLine);
+			}
+	
+			// Mapeamos valores con la información de `parentInfo`
+			HashMap<String, String> localInfo = new HashMap<>();
+			for (int i = 0; i < values.size(); i++) {
+				String param = params.get(i);
+				String value = values.get(i);
+	
+				// Si el valor está en `parentInfo`, lo usamos
+				if (parentInfo.containsKey(value)) {
+					value = parentInfo.get(value);
+				}
+				localInfo.put(param, value);
+			}
+	
+			// Ejecutamos el procedimiento con los valores correctos
+			procedure.runFunction(localInfo);
+		}
+	}
+
+	class ControlStructure extends Instruction {
+		private String str;
+		private Condition con;
+		private String var;
+		private Block block1;
+		private Block block2;
+	
+		// Constructor para if-else
+		public ControlStructure(Token str, Condition con, Block block1, Block block2){
+			this.str = str.image.toLowerCase();
+			this.con = con;
+			this.block1 = block1;
+			this.block2 = block2;
+		}
+	
+		// Constructor para while
+		public ControlStructure(Token str, Condition con, Block block1){
+			this.str = str.image.toLowerCase();
+			this.con = con;
+			this.block1 = block1;
+		}
+	
+		// Constructor para for
+		public ControlStructure(Token str, Token var, Block block1){
+			this.str = str.image.toLowerCase();
+			this.var = var.image.toLowerCase();  
+			if (Robot.variables.containsKey(this.var)) {
+				this.var = String.valueOf(Robot.variables.get(this.var));  // Convertir a número
+			} else {
+				throw new Error("❌ Variable no definida: " + this.var);
+			}
+			this.block1 = block1;
+		}
+	
+		@Override
+		public void run() {
+		  switch (str) {
+			case "if":
+				if (con.run()) {block1.run();} 
+				else {block2.run();}
+				break;
+			case "while":
+				  while(con.run()) { 
+					block1.run();
+				}
+				break;
+			case "for":  // 🔥 Cambio de repeat → for
+				verify();
+				for (int i = 0;  i < Integer.parseInt(var);  i++) {
+					block1.run();
+				}
+				break;
+			}
+		}
+	
+		@Override
+		public void runFunction(HashMap<String, String> info) {
+		  switch (str) {
+			case "if":
+				if (con.runFunction(info)) {
+					block1.runFunction(info);
+				} else {
+					block2.runFunction(info);
+				}
+				break;
+			case "while":
+				  while(con.runFunction(info)) { 
+					block1.runFunction(info);
+				}
+				break;
+			case "for":  // 🔥 Cambio de repeat → for
+				verifyF(info);
+				String value = info.containsKey(var) ? info.get(var) : var;
+				for (int i = 0;  i < Integer.parseInt(value);  i++) {
+					block1.runFunction(info);
+				}
+				break;
+			}
+		}
+	
+		// ✅ Verificación de variables en ejecución normal
+		public void verify() {
+			if  (Robot.variables.containsKey(var) && Robot.variables.get(var) != null) {
+				var = String.valueOf(Robot.variables.get(var));
+			} else {
+				throw new Error("❌ Variable no definida: " + var);
+			}
+		}
+	
+		// ✅ Verificación de variables en ejecución de función
+		public void verifyF(HashMap<String, String> info) {
+			  if (info.containsKey(var) && info.get(var) != null) {
+				var = info.get(var);
+			} else if  (Robot.variables.containsKey(var) && Robot.variables.get(var) != null) {
+				var = String.valueOf(Robot.variables.get(var));
+			} else {
+				throw new Error("❌ Variable no definida: " + var);
+			}
+		}
+	}
+	
+	class Condition {
+		private String con;
+		private String var1;
+		private String var2;
+		private Condition subcondition;
+		private int x;
+		private boolean r = false;
+	
+		// Constructores
+		public Condition(Token con, Token var1, Token var2){
+			this.con = con.image.toLowerCase();
+			this.var1 = var1.image.toLowerCase();
+			this.var2 = var2.image.toLowerCase();
+		}
+	
+		public Condition(Token con, Token var1){
+			this.con = con.image.toLowerCase();
+			this.var1 = var1.image.toLowerCase();
+		}
+	
+		public Condition(Token con, Condition subcondition){
+			this.con = con.image.toLowerCase();
+			this.subcondition = subcondition;
+		}
+	
+		// ✅ Método para verificar si puede moverse en una dirección específica
+		public boolean canMove() {
+			r = true;
+			x = Robot.number(var1);  
+			Point point = world.getPosition();
+			Point change = new Point(point);
+	
+			switch (var2) {
+				case "north":
+					for(int i = 0; i < x; i++) {
+						change.translate(0, -1);
+						if (r) { r = !world.isBlocked(change); }
+					}
+					break;
+				case "south":
+					for(int i = 0; i < x; i++) {
+						change.translate(0, 1);
+						if (r) { r = !world.isBlocked(change); }
+					}
+					break;
+				case "east":
+					for(int i = 0; i < x; i++) {
+						change.translate(1, 0);
+						if (r) { r = !world.isBlocked(change); }
+					}
+					break;
+				case "west":
+					for(int i = 0; i < x; i++) {
+						change.translate(-1, 0);
+						if (r) { r = !world.isBlocked(change); }
+					}
+					break;
+			}
+			return r;
+		}
+	
+		// ✅ Método para verificar si puede saltar en una dirección específica
+		public boolean canJump() {
+			r = true;
+			x = Robot.number(var1);
+			Point point = world.getPosition();
+			Point change = new Point(point);
+	
+			switch (var2) {
+				case "north":
+					change.translate(0, -x);
+					break;
+				case "south":
+					change.translate(0, x);
+					break;
+				case "east":
+					change.translate(x, 0);
+					break;
+				case "west":
+					change.translate(-x, 0);
+					break;
+			}
+			r = !world.isBlocked(change);
+			return r;
+		}
+	
+		public boolean run() {
+		    verify();
+		    
+		
+		    switch (con) {
+		        case "facing":
+		            switch (var1) {
+		                case "north": r = world.facingNorth(); break;
+		                case "south": r = world.facingSouth(); break;
+		                case "east":  r = world.facingEast();  break;
+		                case "west":  r = world.facingWest();  break;
+		            }
+		            break;
+		        case "canput":
+		            x = Robot.number(var1);
+		            r = var2.equals("chips") ? world.freeSpacesForChips() >= x : !world.chipExists();
+		            break;
+		        case "canpick":
+		            x = Robot.number(var1);
+		            r = var2.equals("chips") ? world.chipsToPick() >= x : world.countBalloons() >= x;
+		            break;
+		        case "canmove":
+		        case "canjump":
+		            if (var2.equals("north") || var2.equals("south") || var2.equals("east") || var2.equals("west")) {
+		                // Caso `inDir: O` (orientación fija)
+		                r = con.equals("canmove") ? canMove() : canJump();
+		            } else {
+		                // Caso `toThe: D` (dirección relativa → convertimos a cardinal)
+		                var2 = Robot.convertDirection(var2);
+		                r = con.equals("canmove") ? canMove() : canJump();
+		            }
+		            break;
+		        case "not":
+		            r = !subcondition.run();
+		            break;
+		    }
+		    return r;
+		}
+
+	
+		public boolean runFunction(HashMap<String, String> info) {
+			verifyF(info);
+	
+			boolean r = false;
+			switch(con) {
+				case "facing":
+					switch (var1) {
+						case "north": r = world.facingNorth(); break;
+						case "south": r = world.facingSouth(); break;
+						case "east":  r = world.facingEast();  break;
+						case "west":  r = world.facingWest();  break;
+					}
+					break;
+				case "canput":
+					x = Robot.number(var1);
+					r = var2.equals("chips") ? world.freeSpacesForChips() >= x : !world.chipExists();
+					break;
+				case "canpick":
+					x = Robot.number(var1);
+					r = var2.equals("chips") ? world.chipsToPick() >= x : world.countBalloons() >= x;
+					break;
+				case "canmove":
+					r = canMove();
+					break;
+				case "canjump":
+					r = canJump();
+					break;
+				case "canmovetothe":
+					var2 = Robot.convertDirection(var2);
+					r = canMove();
+					break;
+				case "canjumptothe":
+					var2 = Robot.convertDirection(var2);
+					r = canJump();
+					break;                    
+				case "not":
+					r = !subcondition.runFunction(info);
+					break;
+			}
+			return r;
+		}
+	
+		// ✅ Verificación en ejecución normal
+		public void verify() {
+		    if (Robot.variables.containsKey(var1) && Robot.variables.get(var1) != null) {
+		        var1 = String.valueOf(Robot.variables.get(var1));
+		    }
+		    if (Robot.variables.containsKey(var2) && Robot.variables.get(var2) != null) {
+		        var2 = String.valueOf(Robot.variables.get(var2));
+		    } else {
+		        // Si `var2` es una dirección relativa, la convertimos a cardinal
+		        var2 = Robot.convertDirection(var2);
+		    }
+		}
+
+	
+		// ✅ Verificación en ejecución de función
+		public void verifyF(HashMap<String, String> info) {
+			if (info.containsKey(var1) && info.get(var1) != null) {
+				var1 = info.get(var1);
+			} else if (Robot.variables.containsKey(var1) && Robot.variables.get(var1) != null) {
+				var1 = String.valueOf(Robot.variables.get(var1));
+			}
+	
+			if (info.containsKey(var2) && info.get(var2) != null) {
+				var2 = info.get(var2);
+			} else if (Robot.variables.containsKey(var2) && Robot.variables.get(var2) != null) {
+				var2 = String.valueOf(Robot.variables.get(var2));
+			}
+		}
+
+	}
+
+}
+	
+PARSER_END(Robot)
+
+/**
+ * Sección 1: Tokens del Robot
+ */
+
+SKIP : { " " | "\r" | "\t" | "\n" | "\f" }
+
+/**
+ * 🔹 1️⃣ Comandos del Robot 
+ */
+TOKEN : { <MOVE: "move"> }
+TOKEN : { <TURN: "turn"> }
+TOKEN : { <FACE: "face"> }
+TOKEN : { <PICK: "pick"> }
+TOKEN : { <PUT: "put"> }
+TOKEN : { <JUMP: "jump"> }
+TOKEN : { <GOTO: "goto"> }
+TOKEN : { <NOP: "nop"> }
+
+/**
+ * 🔹 2️⃣ Direcciones y Orientaciones
+ */
+TOKEN : { <LEFT : "left"> }
+TOKEN : { <RIGHT : "right"> }
+TOKEN : { <AROUND : "around"> }
+TOKEN : { <NORTH : "north"> }
+TOKEN : { <SOUTH : "south"> }
+TOKEN : { <WEST : "west"> }
+TOKEN : { <EAST : "east"> }
+TOKEN : { <FRONT : "front"> }
+TOKEN : { <BACK : "back"> }
+TOKEN : { <INDIR : "inDir"> }
+TOKEN : { <TOTHE : "toThe"> }
+
+/**
+ * 🔹 3️⃣ Objetos en el Mundo del Robot 
+ */
+TOKEN : { <BALLOONS: "balloons"> }
+TOKEN : { <CHIPS: "chips"> }
+
+/**
+ * 🔹 4️⃣ Estructuras de Control 
+ */
+TOKEN : { <IF: "if"> }
+TOKEN : { <THEN: "then"> }
+TOKEN : { <ELSE: "else"> }
+TOKEN : { <WHILE: "while"> }
+TOKEN : { <DO: "do"> }
+TOKEN : { <REPEAT: "repeat"> }
+TOKEN : { <FOR: "for"> }  // 🔥 AGREGADO
+
+/**
+ * 🔹 5️⃣ Condiciones
+ */
+TOKEN : { <FACING: "facing"> }
+TOKEN : { <CANPUT: "canput"> }
+TOKEN : { <CANPICK: "canpick"> }
+TOKEN : { <CANMOVE: "canmove"> }
+TOKEN : { <CANJUMP: "canjump"> }
+TOKEN : { <NOT: "not"> }
+TOKEN : { <OF_TYPE: "ofType"> }
+
+
+/**
+ * 🔹 6️⃣ Símbolos y Operadores
+ */
+/**
+ * 🔹 6️⃣ Símbolos y Operadores
+ */
+TOKEN : { <LBRACKET: "["> }
+TOKEN : { <RBRACKET: "]"> }
+TOKEN : { <ASSIGN: ":="> }
+TOKEN : { <END: "."> }
+TOKEN : { <COMMA: ","> }
+TOKEN : { <COLON: ":"> }
+TOKEN : { <VARBLOCK: "|"> }
+TOKEN : { <WITH: "with"> }  // ✅ Agregado
+
+
+
+/**
+ * 🔹 7️⃣ Variables y Valores
+ */
+TOKEN : { <PROC : "proc"> }
+TOKEN : { <AND : "and"> }
+TOKEN : { <NAME : <LETTER> (<LETTER> | <DIGIT>)* > }
+TOKEN : { <NUMBER : (<DIGIT>)+ > }
+TOKEN : { <#LETTER : ["a"-"z", "A"-"Z"]> }
+TOKEN : { <#DIGIT : ["0"-"9"]> }
+
+/**
+ * Sección 2: Reglas de Producción
+ */
+
+boolean command(Console sistema) : { 
+    salida = new String(); 
+    Block block = null;  
+    Instruction ins = null;  
+}
+{
+    (VarDeclaration())?  // Variables opcionales
+    (ProcDeclaration())* // Procedimientos opcionales
+    (
+        block = Block() 
+        | ins = instruction() // ✅ Asegurar que `instruction()` se pueda llamar correctamente
+    )  
+    <EOF> 
+    { 
+        if (block != null) {  
+            System.out.println("✅ Se ejecutará un bloque de instrucciones");
+            block.run();
+        } else if (ins != null) {  
+            System.out.println("✅ Se ejecutará una sola instrucción");
+            ins.run();
+        } else {
+            System.out.println("❌ ERROR: No se reconoció ninguna instrucción");
+        }
+        variables.clear(); 
+        procedures.clear(); 
+        return false; 
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+// 📌 **Definir variables**
+void VarDeclaration() :
+{Token var;}
+{
+    <VARBLOCK> 
+    var = <NAME> { 
+        Robot.addVariable(var);  
+        System.out.println("🟢 Se ha declarado la variable: " + var.image);
+    }  
+    (var = <NAME> { 
+        Robot.addVariable(var);
+        System.out.println("🟢 Se ha declarado la variable: " + var.image);
+    })*  
+    <VARBLOCK> 
+    { System.out.println("✅ Fin de VarDeclaration()"); }
+}
+
+
+
+
+
+/* Function Rules */
+
+void ProcDeclaration() :
+{
+    Token procName;
+    Procedure procedure;
+}
+{
+    <PROC> procName = <NAME>
+    { procedure = new Procedure(procName.image); }  // ✅ Creamos la instancia correcta
+
+    Block()  // ✅ Se asume que el bloque contiene las instrucciones
+    { Robot.addProcedure(procedure); }  // ✅ Se guarda en `procedures`
+}
+
+
+void ProcedureDef() :
+{
+    Token procName, param;
+    Procedure procedure;
+    Block block;
+}
+{
+    <PROC> procName = <NAME>  // Nombre del procedimiento
+    { procedure = new Procedure(procName.image); }
+
+    <COLON> param = <NAME> { procedure.addParam(param.image); }  // Ahora se guarda en `localVariables`
+
+    // Se permiten más parámetros
+    (<NAME> <COLON> param = <NAME> { procedure.addParam(param.image); })*
+
+    block = Block()  // Cuerpo del procedimiento
+    <END>  // Finaliza con `.`
+    { procedure.setBlock(block); Robot.addProcedure(procedure); }
+}
+
+
+
+
+
+Instruction instruction() : { Instruction ins; } {
+    { System.out.println("🟢 Intentando reconocer una instrucción..."); }  // ✅ Print de depuración
+
+    ins = Move() { System.out.println("🟢 Se reconoció MOVE"); return ins; } 
+    | ins = Jump() { System.out.println("🟢 Se reconoció JUMP"); return ins; }  
+    | ins = Command() { System.out.println("🟢 Se reconoció un Command"); return ins; }
+    | ins = ProcedureCall() { System.out.println("🟢 Se reconoció una llamada a procedimiento"); return ins; }
+    | ins = ControlStructure() { System.out.println("🟢 Se reconoció una estructura de control"); return ins; }
+}
+
+
+
+
+
+
+// 📌 **Definir los comandos**
+Command Command() :
+{
+    Token com, param1, param2;
+}
+{
+    (
+
+        // ✅ **Comando ASSIGN (asignación `:=`)**
+        com = <ASSIGN> param1 = <NAME> { Robot.checkVariable(param1); } 
+        <COLON> (param2 = <NUMBER> | param2 = <NAME> { Robot.checkVariable(param2); }) <END> 
+        { return new Command(com, param1, param2); }
+
+
+        // ✅ **Comando TURN**
+        | com = <TURN> <COLON> param1 = Direction() <END> {
+            return new Command(com, param1);
+        }
+
+        // ✅ **Comando FACE**
+        | com = <FACE> <COLON> param1 = Orientation() <END> {
+            return new Command(com, param1);
+        }
+
+        // ✅ **Comando PUT**
+        | com = <PUT> <COLON> (param1 = <NUMBER> | param1 = <NAME> { Robot.checkVariable(param1); }) 
+          <OF_TYPE> param2 = ObjectType() <END> {
+            return new Command(com, param1, param2);
+        }
+
+        // ✅ **Comando PICK**
+        | com = <PICK> <COLON> (param1 = <NUMBER> | param1 = <NAME> { Robot.checkVariable(param1); }) 
+          <OF_TYPE> param2 = ObjectType() <END> {
+            return new Command(com, param1, param2);
+        }
+
+        // ✅ **Comando GOTO**
+        | com = <GOTO> <COLON> (param1 = <NUMBER> | param1 = <NAME> { Robot.checkVariable(param1); }) 
+          <WITH> (param2 = <NUMBER> | param2 = <NAME> { Robot.checkVariable(param2); }) <END> {
+            return new Command(com, param1, param2);
+        }
+
+        // ✅ **Comando NOP**
+        | com = <NOP> <END> {
+            return new Command(com);
+        }
+    )
+}
+
+
+ControlStructure ControlStructure() :
+{
+    Token str, var;
+    Condition con;
+    Block block1, block2;
+}
+{
+    (
+        // ✅ **IF Statement**
+        str = <IF> <COLON> con = Condition() <THEN> <COLON> 
+        (block1 = Block() | block1 = OneInstruction()) 
+        <ELSE> <COLON> 
+        (block2 = Block() | block2 = OneInstruction()) 
+        { return new ControlStructure(str, con, block1, block2); }
+
+        // ✅ **WHILE Loop**
+        | str = <WHILE> <COLON> con = Condition() <DO> <COLON> 
+        (block1 = Block() | block1 = OneInstruction())  
+        { return new ControlStructure(str, con, block1); }
+
+		// ✅ **FOR Loop (for: n repeat:)**
+		| str = <FOR> <COLON> (var = <NUMBER> | var = <NAME> { Robot.checkVariable(var); }) <REPEAT> 
+		(block1 = Block() | block1 = OneInstruction())  
+		{ return new ControlStructure(str, var, block1); }
+
+    )
+}
+
+Condition Condition() : { Token con = null; Token param1; Token param2; Condition subcondition; } {
+    (
+        con = <FACING> <COLON> param1 = <NORTH> | param1 = <SOUTH> | param1 = <WEST> | param1 = <EAST>  
+        { return new Condition(con, param1); }
+
+        | (con = <CANPUT> | con = <CANPICK>) <COLON> 
+          (param1 = <NUMBER> | param1 = <NAME> { Robot.checkVariable(param1); }) 
+          <OF_TYPE> (param2 = <BALLOONS> | param2 = <CHIPS>)  
+        { return new Condition(con, param1, param2); }
+
+        | (con = <CANMOVE> | con = <CANJUMP>) <COLON> 
+          (param1 = <NUMBER> | param1 = <NAME> { Robot.checkVariable(param1); }) 
+          ( <TOTHE> (param2 = <FRONT> | param2 = <BACK> | param2 = <LEFT> | param2 = <RIGHT>)  
+          | <INDIR> (param2 = <NORTH> | param2 = <SOUTH> | param2 = <WEST> | param2 = <EAST>) )  
+        { return new Condition(con, param1, param2); }
+
+        | con = <NOT> <COLON> subcondition = Condition()  
+        { return new Condition(con, subcondition); } 
+    )
+}
+
+
+
+
+// 📌 **Llamada a procedimientos con verificación**
+ProcedureCall ProcedureCall() :
+{
+    Token procName, param;
+    ProcedureCall call;
+}
+{
+    procName = <NAME> <COLON> { call = new ProcedureCall(procName); }
+
+    ((param = <NUMBER> | param = <NAME> { Robot.checkVariable(param); }) { call.addValue(param); }
+    
+    (<COMMA> (param = <NUMBER> | param = <NAME> { Robot.checkVariable(param); }) { call.addValue(param); })*)?
+
+    <END> { return call; }  // 🔥 Importante: ahora devolvemos el objeto `ProcedureCall`
+}
+
+// 📌 **Bloque de instrucciones `[ ... ]`**
+Block Block() : { Block block = new Block(); Instruction ins; } {
+    <LBRACKET> 
+    ins = instruction() { block.addInstruction(ins); }
+    (<END> ins = instruction() { block.addInstruction(ins); })*  // 🔥 Separamos con `.`
+    <RBRACKET>
+    { return block; }
+}
+
+// 📌 **Instrucción única (usada en IF, WHILE, etc.)**
+Block OneInstruction() : { Block block = new Block(); Instruction ins; } {
+    ins = instruction() { block.addInstruction(ins); }
+    { return block; }
+}
+
+// 📌 **Dirección del Robot**
+Token Direction() : { Token param; }
+{
+    param = <FRONT> { return param; }
+    | param = <BACK> { return param; }
+    | param = <LEFT> { return param; }
+    | param = <RIGHT> { return param; }
+}
+
+// 📌 **Orientación del Robot**
+Token Orientation() : { Token param; }
+{
+    param = <NORTH> { return param; }
+    | param = <SOUTH> { return param; }
+    | param = <WEST> { return param; }
+    | param = <EAST> { return param; }
+}
+
+// 📌 **Tipo de Objeto (Globos, Fichas)**
+Token ObjectType() : { Token param1; }
+{
+    ( param1 = <BALLOONS> | param1 = <CHIPS> ) { return param1; }
+}
+
+Command Move() :
+{
+    Token com, param1, param2 = null;
+    String moveType = "simple";  // Puede ser "simple", "toThe", o "inDir"
+}
+{
+    com = <MOVE> <COLON> 
+    ( param1 = <NUMBER> | param1 = <NAME> { Robot.checkVariable(param1); } ) 
+    (
+        <TOTHE> param2 = Direction() { moveType = "toThe"; }
+        | <INDIR> param2 = Orientation() { moveType = "inDir"; }
+    )? 
+    <END>
+    {
+        System.out.println("🟢 Parser: Se creó un comando MOVE " + moveType + 
+                          " con param1=" + param1.image + 
+                          (param2 != null ? " y param2=" + param2.image : ""));
+        return new Command(com, param1, param2, moveType);
+    }
+
+}
+
+Command Jump() :
+{
+    Token com, param1, param2 = null;
+    String jumpType = "simple";  // Puede ser "simple", "toThe", o "inDir"
+}
+{
+    com = <JUMP> <COLON> 
+    ( param1 = <NUMBER> | param1 = <NAME> { Robot.checkVariable(param1); } ) 
+    (
+        <TOTHE> param2 = Direction() { jumpType = "toThe"; }
+        | <INDIR> param2 = Orientation() { jumpType = "inDir"; }
+    )? 
+    <END>
+    {
+        System.out.println("🟢 Parser: Se creó un comando JUMP " + jumpType + 
+                          " con param1=" + param1.image + 
+                          (param2 != null ? " y param2=" + param2.image : ""));
+        return new Command(com, param1, param2, jumpType);
+    }
+}
+
+
+
+
+
+
+
